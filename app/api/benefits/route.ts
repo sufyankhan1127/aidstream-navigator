@@ -3,59 +3,69 @@ import { createClient } from "@supabase/supabase-js";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { UserProfileSchema } from "@/types";
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-const googleKey = process.env.GOOGLE_API_KEY;
-
-if (!supabaseUrl || !serviceKey || !googleKey) {
-  console.error("MISSING ENV VARS"); 
-}
-
-const supabase = createClient(supabaseUrl || "", serviceKey || "");
-const genAI = new GoogleGenerativeAI(googleKey || "");
+// Note: We initialize clients INSIDE the function to prevent Build Errors
+// on platforms like Render/Vercel during static analysis.
 
 export async function POST(req: NextRequest) {
   try {
-    console.log("1. processing request...");
+    console.log("1. Request Received");
+
+    // 1. Validate Env Vars at Runtime (not Build time)
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+    const googleKey = process.env.GOOGLE_API_KEY;
+
+    if (!supabaseUrl || !serviceKey || !googleKey) {
+      console.error("MISSING ENV VARS");
+      return NextResponse.json({ error: "Server Configuration Error: Missing Keys" }, { status: 500 });
+    }
+
+    // 2. Initialize Clients
+    const supabase = createClient(supabaseUrl, serviceKey);
+    const genAI = new GoogleGenerativeAI(googleKey);
+
+    // 3. Parse Body
     const body = await req.json();
     const profile = UserProfileSchema.parse(body);
 
-    // 1. Embed
-    const userContext = "Age: " + profile.age + ", Status: " + profile.employmentStatus + ", Loc: " + profile.location + ", Need: " + profile.needs;
+    // 4. Embed User Profile
     const embedModel = genAI.getGenerativeModel({ model: "text-embedding-004" });
+    const userContext = `Age: ${profile.age}, Status: ${profile.employmentStatus}, Need: ${profile.needs}`;
     const { embedding } = await embedModel.embedContent(userContext);
 
-    // 2. Search DB
+    // 5. Search Database
     const { data: matches, error } = await supabase.rpc("match_schemes", {
       query_embedding: embedding.values,
       match_threshold: 0.3,
-      match_count: 4,
+      match_count: 5,
     });
     
-    if (error) throw new Error("DB Error: " + error.message);
+    if (error) throw new Error("Database Error: " + error.message);
+    console.log(`2. Found ${matches?.length || 0} matches in DB`);
 
-    console.log("2. Matches found:", matches?.length || 0);
+    // 6. Generate Content
+    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
 
-    // 3. Generate Content
-    // CHANGED TO 'gemini-flash-latest' - This is a stable alias from your list
-    const model = genAI.getGenerativeModel({ model: "gemini-flash-latest" });
-
-    const prompt = 
-      "Context: Social Worker AI. User Profile: " + JSON.stringify(profile) + "\n" +
-      "Schemes: " + JSON.stringify(matches) + "\n" +
-      "Task: Return JSON object { schemes: [{ schemeName, summary, eligibilityReason, steps:[], documents:[] }] }." +
-      "If no match, return { schemes: [] }. JSON ONLY.";
+    const prompt = `
+      Act as a social worker.
+      User Profile: ${JSON.stringify(profile)}
+      Schemes: ${JSON.stringify(matches)}
+      
+      Task: Return a JSON object with the best schemes for this user.
+      Format: { "schemes": [{ "schemeName": "string", "summary": "string", "eligibilityReason": "string", "steps": ["string"], "documents": ["string"] }] }
+      Rules: JSON ONLY. No markdown blocks. If no matches, return { "schemes": [] }.
+    `;
 
     const result = await model.generateContent(prompt);
     const text = result.response.text();
+
+    // Clean JSON
+    const cleaned = text.replace(/```json|```/g, "").trim();
     
-    // Clean and Parse
-    const cleaned = text.replace(/`json|`/g, "").trim();
     return NextResponse.json(JSON.parse(cleaned));
 
   } catch (err: any) {
-    console.error("API FAIL:", err);
-    // Return the error text so you can see it in the browser
+    console.error("API Error:", err.message);
     return NextResponse.json({ error: err.message }, { status: 500 });
   }
 }

@@ -5,7 +5,6 @@ import { useRouter } from "next/navigation";
 import { UserProfileSchema } from "@/types";
 import { ArrowRight, Sparkles, MapPin, User, Briefcase, DollarSign } from "lucide-react";
 
-// Helper components for clean code
 const Label = ({ children, icon: Icon }: { children: React.ReactNode; icon?: any }) => (
   <label className="flex items-center gap-2 text-sm font-bold text-slate-700 mb-2">
     {Icon && <Icon className="w-4 h-4 text-indigo-600" />}
@@ -58,8 +57,11 @@ export default function LandingPage() {
 
     if (!result.success) {
       const fieldErrors: Record<string, string> = {};
-      result.error.errors.forEach((err) => {
-        if (err.path[0]) fieldErrors[err.path[0].toString()] = err.message;
+      // FIXED: Use .issues instead of .errors
+      result.error.issues.forEach((issue) => {
+        if (issue.path[0]) {
+          fieldErrors[issue.path[0].toString()] = issue.message;
+        }
       });
       setErrors(fieldErrors);
       setLoading(false);
@@ -74,7 +76,6 @@ export default function LandingPage() {
     <main className="min-h-screen bg-gradient-to-br from-indigo-100 via-white to-teal-50 flex items-center justify-center p-4 md:p-8">
       <div className="max-w-2xl w-full bg-white shadow-2xl shadow-indigo-100/50 rounded-3xl overflow-hidden border border-white/50 backdrop-blur-sm">
         
-        {/* Header Section */}
         <div className="bg-indigo-600 p-8 text-center relative overflow-hidden">
           <div className="absolute top-0 left-0 w-full h-full bg-gradient-to-r from-indigo-600 to-blue-500 opacity-90"></div>
           <div className="absolute -top-10 -right-10 w-40 h-40 bg-white/10 rounded-full blur-2xl"></div>
@@ -83,14 +84,13 @@ export default function LandingPage() {
             <h1 className="text-3xl font-bold text-white flex items-center justify-center gap-2 mb-2">
               <Sparkles className="w-6 h-6 text-yellow-300" /> AidStream Navigator
             </h1>
-            <p className="text-indigo-100 text-sm font-bold uppercase tracking-wider">Sustainable Communities • SDG 11</p>
+            <p className="text-indigo-100 text-sm font-bold uppercase tracking-wider">Sustainable Communities � SDG 11</p>
             <p className="mt-4 text-indigo-50 text-lg max-w-md mx-auto leading-relaxed">
               Describe your situation, and our AI will find the government schemes you qualify for.
             </p>
           </div>
         </div>
 
-        {/* Form Section */}
         <form onSubmit={handleSubmit} className="p-8 space-y-6">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div>
@@ -148,7 +148,7 @@ export default function LandingPage() {
             className="w-full bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-700 hover:to-blue-700 text-white font-bold py-4 px-6 rounded-xl transition-all shadow-lg shadow-indigo-200 active:scale-[0.98] flex items-center justify-center gap-2 mt-2 disabled:opacity-70 disabled:cursor-not-allowed"
           >
             {loading ? (
-              <span className="flex items-center gap-2">Analyzing... <span className="animate-spin">⏳</span></span>
+              <span className="flex items-center gap-2">Analyzing... <span className="animate-spin">?</span></span>
             ) : (
               <>Find My Benefits <ArrowRight className="w-5 h-5" /></>
             )}
